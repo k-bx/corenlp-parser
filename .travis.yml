@@ -13,9 +13,6 @@ before_install:
   - export PATH=~/.local/bin:$PATH
   - curl -L https://github.com/commercialhaskell/stack/releases/download/v1.6.3/stack-1.6.3-linux-x86_64.tar.gz | tar xz -C ~/tmp
   - mv ~/tmp/stack-1.6.3-linux-x86_64/stack ~/.local/bin/
-  - curl -L http://download.redis.io/releases/redis-3.2.11.tar.gz | tar xz -C ~/tmp
-  - cd ~/tmp/redis-3.2.11 && make
-  - ~/tmp/redis-3.2.11/src/redis-server &
   - cd ${TRAVIS_BUILD_DIR}
 
 matrix:
