@@ -2,11 +2,11 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 66ac10665c375c6292ba895c23ff4800a6de5bc41fb868f5a3414beff5376c2f
+-- hash: 50fa527a06ceb1365bed8b75f132a9474dbc465df34aea50dfa6970779037af7
 
 name:           corenlp-parser
 version:        0.1.0.0
-category:       Unclassified
+category:       Natural Language Processing
 homepage:       https://github.com/k-bx/corenlp-parser#readme
 author:         Kostiantyn Rybnikov
 maintainer:     k-bx@k-bx.com
