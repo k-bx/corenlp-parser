@@ -1,0 +1,27 @@
+name:                corenlp-parser
+version:             0.1.0.0
+#synopsis:
+#description:
+homepage:            https://github.com/k-bx/corenlp-parser#readme
+license:             BSD3
+author:              Kostiantyn Rybnikov
+maintainer:          k-bx@k-bx.com
+copyright:           All Rights Reserved
+category:            Unclassified
+extra-source-files:
+- README.md
+
+dependencies:
+  - aeson
+  - base >= 4.7 && < 5
+  - directory
+  - process
+  - raw-strings-qq
+  - string-class
+  - text
+  - temporary
+  - unordered-containers
+
+library:
+  source-dirs:      src
+  ghc-options: -Wall -O
