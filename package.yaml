@@ -24,4 +24,4 @@ dependencies:
 
 library:
   source-dirs:      src
-  ghc-options: -Wall -O
+  ghc-options: -Wall
