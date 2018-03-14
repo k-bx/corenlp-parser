@@ -1,7 +1,7 @@
 name:                corenlp-parser
-version:             0.1.0.0
-#synopsis:
-#description:
+version:             0.1.0.1
+synopsis:            Launches CoreNLP and parses the JSON output
+description:         Launches CoreNLP and parses the JSON output
 homepage:            https://github.com/k-bx/corenlp-parser#readme
 license:             BSD3
 author:              Kostiantyn Rybnikov
