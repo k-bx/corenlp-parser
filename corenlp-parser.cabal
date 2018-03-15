@@ -2,10 +2,10 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1c8c69412199cfc131a9616ffeb4fa1d6cc14c80f11a354954fb37fd463ab36e
+-- hash: e8a7cb9abd37d5caa6e148ad4d63629e9f60c0f297c21244bf1fff026e90c24c
 
 name:           corenlp-parser
-version:        0.1.0.1
+version:        0.2.0.0
 synopsis:       Launches CoreNLP and parses the JSON output
 description:    Launches CoreNLP and parses the JSON output
 category:       Natural Language Processing
