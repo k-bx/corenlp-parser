@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- | Module provides a handy wrapper around the CoreNLP project\'s
 -- command-line utility https://nlp.stanford.edu/software/corenlp.html
@@ -13,14 +14,17 @@ module NLP.CoreNLP
   , Entitymention(..)
   , Token(..)
   , Sentence(..)
+  , PennPOS(..)
   , Coref(..)
   , CorefsId
   , Corefs
   , Document(..)
+  , NamedEntity(..)
   -- * Internal
   , test
   ) where
 
+import Control.Applicative
 import Control.Monad (forM, when)
 import qualified Data.Aeson as J
 import Data.Aeson (FromJSON, ToJSON)
@@ -78,6 +82,100 @@ instance FromJSON Entitymention where
 instance ToJSON Entitymention where
   toJSON = J.genericToJSON jsonOpts
 
+data PennPOS
+  = CC -- ^ Coordinating conjunction
+  | CD -- ^ Cardinal number
+  | DT -- ^ Determiner
+  | EX -- ^ Existential *there*
+  | FW -- ^ Foreign word
+  | IN -- ^ Preposition or subordinating conjunction
+  | JJ -- ^ Adjective
+  | JJR -- ^ Adjective, comparative
+  | JJS -- ^ Adjective, superlative
+  | LS -- ^ List item marker
+  | MD -- ^ Modal
+  | NN -- ^ Noun, singular or mass
+  | NNS -- ^ Noun, plural
+  | NNP -- ^ Proper noun, singular
+  | NNPS -- ^ Proper noun, plural
+  | PDT -- ^ Predeterminer
+  | POS -- ^ Possessive ending
+  | PRP -- ^ Personal pronoun
+  | PRPDollar -- ^ Possessive pronoun
+  | RB -- ^ Adverb
+  | RBR -- ^ Adverb, comparative
+  | RBS -- ^ Adverb, superlative
+  | RP -- ^ Particle
+  | SYM -- ^ Symbol
+  | TO -- ^ *to*
+  | UH -- ^ Interjection
+  | VB -- ^ Verb, base form
+  | VBD -- ^ Verb, past tense
+  | VBG -- ^ Verb, gerund or present participle
+  | VBN -- ^ Verb, past participle
+  | VBP -- ^ Verb, non-3rd person singular present
+  | VBZ -- ^ Verb, 3rd person singular present
+  | WDT -- ^ Wh-determiner
+  | WP -- ^ Wh-pronoun
+  | WPDollar -- ^ Possessive wh-pronoun
+  | WRB -- ^ Wh-adverb
+  | LRB -- ^ "-LRB-"? No idea what's this
+  | RRB -- ^ "-RRB-"? No idea what's this
+  | PosPunctuation Text -- ^ anyOf ".:,''$#$,", sometimes few together
+  deriving (Show, Eq, Generic)
+
+instance FromJSON PennPOS where
+  parseJSON (J.String "WP$") = pure WPDollar
+  parseJSON (J.String "PRP$") = pure PRPDollar
+  parseJSON (J.String "-LRB-") = pure LRB
+  parseJSON (J.String "-RRB-") = pure RRB
+  parseJSON x = J.genericParseJSON jsonOpts x <|> parsePunctuation x
+    where
+      parsePunctuation (J.String y) = pure (PosPunctuation y)
+      parsePunctuation _ = fail "Expecting POS to be a String"
+
+instance ToJSON PennPOS where
+  toJSON WPDollar = J.String "WP$"
+  toJSON PRPDollar = J.String "PRP$"
+  toJSON (PosPunctuation t) = J.String t
+  toJSON LRB = J.String "-LRB-"
+  toJSON RRB = J.String "-RRB-"
+  toJSON x = J.genericToJSON jsonOpts x
+
+-- | See https:\/\/stanfordnlp.github.io\/CoreNLP\/ner.html
+data NamedEntity
+  = PERSON
+  | LOCATION
+  | ORGANIZATION
+  | MISC
+  | MONEY
+  | NUMBER
+  | ORDINAL
+  | PERCENT
+  | DATE
+  | TIME
+  | DURATION
+  | SET
+  | EMAIL
+  | URL
+  | CITY
+  | STATE_OR_PROVINCE
+  | COUNTRY
+  | NATIONALITY
+  | RELIGION
+  | TITLE -- ^ Job title
+  | IDEOLOGY
+  | CRIMINAL_CHARGE
+  | CAUSE_OF_DEATH
+  | O -- ^ Not a named entity? TODO: check somehow
+  deriving (Show, Eq, Generic)
+
+instance FromJSON NamedEntity where
+  parseJSON = J.genericParseJSON jsonOpts
+
+instance ToJSON NamedEntity where
+  toJSON = J.genericToJSON jsonOpts
+
 data Token = Token
   { index :: Int
   , word :: Text
@@ -85,8 +183,8 @@ data Token = Token
   , lemma :: Text
   , characterOffsetBegin :: Int
   , characterOffsetEnd :: Int
-  , pos :: Text
-  , ner :: Text
+  , pos :: PennPOS
+  , ner :: NamedEntity
   , speaker :: Text
   , before :: Text
   , after :: Text
@@ -186,13 +284,11 @@ launchCoreNLP fp texts =
       code <- waitForProcess processHandle
       when (code /= ExitSuccess) (error (show code))
       let tmpFileNamesJson = map (<> ".json") tmpFileNames
-      _ <- Prelude.getLine
       results <- forM tmpFileNamesJson $ \fname -> T.readFile fname
       return (map parseJsonDoc results)
 
 headlines :: Text
 headlines =
-  S.toText $
   [r|
 {
   "docId": "headlines.txt",
