@@ -6,6 +6,7 @@ haddocks for the documentation (or read the source) http://hackage.haskell.org/p
 Building via:
 
 ```
+sudo apt install librocksdb-dev  # "brew install rocksdb" on macOS
 stack build
 ```
 

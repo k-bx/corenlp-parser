@@ -15,6 +15,11 @@ before_install:
   - mv ~/tmp/stack-1.6.3-linux-x86_64/stack ~/.local/bin/
   - cd ${TRAVIS_BUILD_DIR}
 
+addons:
+  apt:
+    packages:
+      - librocksdb-dev
+
 matrix:
   include:
     - env: GHCVER=8.2.2 STACK_YAML=stack.yaml
