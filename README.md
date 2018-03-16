@@ -1,4 +1,4 @@
-# corenlp-parser
+# corenlp-parser [![Build Status](https://travis-ci.org/k-bx/corenlp-parser.svg?branch=master)](https://travis-ci.org/k-bx/corenlp-parser)
 
 Launches CoreNLP and parses the JSON output. See `NLP.CoreNLP`
 haddocks for the documentation (or read the source) http://hackage.haskell.org/package/corenlp-parser
