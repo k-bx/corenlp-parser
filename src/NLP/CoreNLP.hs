@@ -301,7 +301,7 @@ launchCoreNLP fp' LaunchOptions {..} texts' = do
     Nothing -> go Nothing fp texts'
     Just cacheFp ->
       bracket
-        (Rocks.open cacheFp def)
+        (Rocks.open cacheFp def {Rocks.createIfMissing = True})
         Rocks.close
         (\db -> go (Just db) fp texts')
   where
