@@ -22,6 +22,7 @@ module NLP.CoreNLP
   , Document(..)
   , NamedEntity(..)
   , ParsedDocument(..)
+  , LaunchOptions(..)
   -- * Internal
   , extractSuccessDocs
   , test
