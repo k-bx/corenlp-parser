@@ -21,6 +21,7 @@ module NLP.CoreNLP
   , Corefs
   , Document(..)
   , NamedEntity(..)
+  , ParsedDocument(..)
   -- * Internal
   , extractSuccessDocs
   , test
