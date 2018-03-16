@@ -14,12 +14,17 @@ extra-source-files:
 dependencies:
   - aeson
   - base >= 4.7 && < 5
+  - cryptonite
+  - data-default
   - directory
   - process
   - raw-strings-qq
+  - rocksdb-haskell
+  - safe-exceptions
   - string-class
-  - text
+  - store
   - temporary
+  - text
   - unordered-containers
 
 library:

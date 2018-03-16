@@ -3,6 +3,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- | Module provides a handy wrapper around the CoreNLP project\'s
 -- command-line utility https://nlp.stanford.edu/software/corenlp.html
@@ -21,20 +22,29 @@ module NLP.CoreNLP
   , Document(..)
   , NamedEntity(..)
   -- * Internal
+  , extractSuccessDocs
   , test
   ) where
 
 import Control.Applicative
+import Control.Exception.Safe
 import Control.Monad (forM, when)
+import qualified Crypto.Hash as Crypto
 import qualified Data.Aeson as J
 import Data.Aeson (FromJSON, ToJSON)
+import Data.Default
+import Data.Either
 import Data.HashMap.Strict (HashMap)
+import Data.Maybe
 import Data.Semigroup
+import qualified Data.Store as Store
 import Data.String.Class as S
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import qualified Database.RocksDB.Base as Rocks
 import GHC.Generics (Generic)
+import System.Directory
 import System.Exit
 import System.IO (hFlush)
 import System.IO.Temp
@@ -58,6 +68,8 @@ data Dependency = Dependency
   , dependentGloss :: Text
   } deriving (Show, Eq, Generic)
 
+instance Store.Store Dependency
+
 instance FromJSON Dependency where
   parseJSON = J.genericParseJSON jsonOpts
 
@@ -75,6 +87,8 @@ data Entitymention = Entitymention
   , ner :: Text
   , normalizedNER :: Maybe Text
   } deriving (Show, Eq, Generic)
+
+instance Store.Store Entitymention
 
 instance FromJSON Entitymention where
   parseJSON = J.genericParseJSON jsonOpts
@@ -124,6 +138,8 @@ data PennPOS
   | PosPunctuation Text -- ^ anyOf ".:,''$#$,", sometimes few together
   deriving (Show, Eq, Generic)
 
+instance Store.Store PennPOS
+
 instance FromJSON PennPOS where
   parseJSON (J.String "WP$") = pure WPDollar
   parseJSON (J.String "PRP$") = pure PRPDollar
@@ -170,6 +186,8 @@ data NamedEntity
   | O -- ^ Not a named entity? TODO: check somehow
   deriving (Show, Eq, Generic)
 
+instance Store.Store NamedEntity
+
 instance FromJSON NamedEntity where
   parseJSON = J.genericParseJSON jsonOpts
 
@@ -190,6 +208,8 @@ data Token = Token
   , after :: Text
   } deriving (Show, Eq, Generic)
 
+instance Store.Store Token
+
 instance FromJSON Token where
   parseJSON = J.genericParseJSON jsonOpts
 
@@ -205,6 +225,8 @@ data Sentence = Sentence
   , entitymentions :: [Entitymention]
   , tokens :: [Token]
   } deriving (Show, Eq, Generic)
+
+instance Store.Store Sentence
 
 instance FromJSON Sentence where
   parseJSON = J.genericParseJSON jsonOpts
@@ -227,6 +249,8 @@ data Coref = Coref
   , isRepresentativeMention :: Bool
   } deriving (Show, Eq, Generic)
 
+instance Store.Store Coref
+
 instance FromJSON Coref where
   parseJSON = J.genericParseJSON jsonOpts
 
@@ -243,6 +267,8 @@ data Document = Document
   , corefs :: Corefs
   } deriving (Show, Eq, Generic)
 
+instance Store.Store Document
+
 instance FromJSON Document where
   parseJSON = J.genericParseJSON jsonOpts
 
@@ -253,39 +279,110 @@ instance ToJSON Document where
 parseJsonDoc :: Text -> Either String Document
 parseJsonDoc = J.eitherDecode . S.fromText
 
+-- | Additional options
+data LaunchOptions = LaunchOptions
+  { cacheDb :: Maybe FilePath -- ^ Optional path to a RocksDB file which will be used as a cache
+  } deriving (Show, Eq)
+
+instance Default LaunchOptions where
+  def = LaunchOptions Nothing
+
 -- | Launch CoreNLP with your inputs. This function will put every piece of 'Text' in a separate file, launch CoreNLP subprocess, and parse the results
 launchCoreNLP ::
      FilePath -- ^ Path to the directory where you extracted the CoreNLP project
+  -> LaunchOptions
   -> [Text] -- ^ List of inputs
-  -> IO [Either String Document] -- ^ List of parsed results
-launchCoreNLP fp texts =
-  withSystemTempDirectory "corenlp-parser" $ \tempDir -> do
-    Prelude.putStrLn $ "Temp dir used is is: " <> tempDir
-    tmpFileNames <-
-      forM (zip [1 ..] texts) $ \(i :: Integer, txt) -> do
-        let fname = ("text-" ++ show i ++ ".txt")
-        T.writeFile (tempDir ++ "/" ++ fname) txt
-        return fname
-    withSystemTempFile "filelist.txt" $ \filelistTxt hfilelistTxt -> do
-      Prelude.putStrLn $ "Filelist.txt: " ++ show filelistTxt
-      Prelude.putStrLn $ "Temporary files: " ++ show tmpFileNames
-      let filesList =
-            T.unlines (map (\x -> S.toText (tempDir <> "/" <> x)) tmpFileNames)
-      Prelude.putStrLn $ "Filelist.txt filesList: " ++ show filesList
-      T.hPutStrLn hfilelistTxt (T.strip filesList)
-      hFlush hfilelistTxt
-      let spec =
-            shell
-              ("java --add-modules java.se.ee -cp \"" ++
-               fp ++
-               "*\" -Xmx2g edu.stanford.nlp.pipeline.StanfordCoreNLP -annotators tokenize,ssplit,pos,lemma,ner,parse,dcoref -outputFormat json -filelist " <>
-               filelistTxt)
-      (_, _, _, processHandle) <- createProcess spec
-      code <- waitForProcess processHandle
-      when (code /= ExitSuccess) (error (show code))
-      let tmpFileNamesJson = map (<> ".json") tmpFileNames
-      results <- forM tmpFileNamesJson $ \fname -> T.readFile fname
-      return (map parseJsonDoc results)
+  -> IO [ParsedDocument] -- ^ List of parsed results
+launchCoreNLP fp' LaunchOptions {..} texts' = do
+  let fp = ensureEndSlash fp'
+  case cacheDb of
+    Nothing -> go Nothing fp texts'
+    Just cacheFp ->
+      bracket
+        (Rocks.open cacheFp def)
+        Rocks.close
+        (\db -> go (Just db) fp texts')
+  where
+    ensureEndSlash :: String -> String
+    ensureEndSlash t =
+      if t !! (Prelude.length t - 1) == '/'
+        then t
+        else t <> "/"
+    go mcacheDb fp texts'' = do
+      (cachedDocs, texts) <- getCachedDocs mcacheDb texts''
+      Prelude.putStrLn $
+        "Got documents out of cache: " ++ show (Prelude.length cachedDocs)
+      withSystemTempDirectory "corenlp-parser" $ \tempDir -> do
+        withCurrentDirectory tempDir $ do
+          Prelude.putStrLn $ "Temp dir used is is: " <> tempDir
+          tmpFileNames <-
+            forM (zip [1 ..] texts) $ \(i :: Integer, txt) -> do
+              let fname = ("text-" ++ show i ++ ".txt")
+              T.writeFile (tempDir ++ "/" ++ fname) txt
+              return fname
+          withSystemTempFile "filelist.txt" $ \filelistTxt hfilelistTxt -> do
+            Prelude.putStrLn $ "Filelist.txt: " ++ show filelistTxt
+            let filesList =
+                  T.unlines
+                    (map (\x -> S.toText (tempDir <> "/" <> x)) tmpFileNames)
+            T.hPutStrLn hfilelistTxt (T.strip filesList)
+            hFlush hfilelistTxt
+            let cmd =
+                  "java --add-modules java.se.ee -cp \"" ++
+                  fp ++
+                  "*\" -Xmx4g edu.stanford.nlp.pipeline.StanfordCoreNLP -annotators tokenize,ssplit,pos,lemma,ner,parse,dcoref -outputFormat json -filelist " <>
+                  filelistTxt
+            Prelude.putStrLn $ "Running a command: " ++ cmd
+            let spec = shell cmd
+            (_, _, _, processHandle) <- createProcess spec
+            code <- waitForProcess processHandle
+            when (code /= ExitSuccess) (error (show code))
+            let tmpFileNamesJson = map (<> ".json") tmpFileNames
+            results <- forM tmpFileNamesJson $ \fname -> T.readFile fname
+            rv <- extractSuccessDocs (zip texts (map parseJsonDoc results))
+            cacheResults mcacheDb rv
+            return (cachedDocs ++ rv)
+    getCachedDocs :: Maybe Rocks.DB -> [Text] -> IO ([ParsedDocument], [Text])
+    getCachedDocs Nothing texts = return ([], texts)
+    getCachedDocs (Just rocks) texts = do
+      (rv :: [Either ParsedDocument Text]) <-
+        forM texts $ \t -> do
+          res <- Rocks.get rocks def (hash t)
+          case res of
+            Nothing -> return (Right t)
+            Just bs ->
+              case Store.decode bs of
+                Left _e -> return (Right t)
+                Right x -> return (Left x)
+      return (partitionEithers rv)
+    cacheResults Nothing _ = return ()
+    cacheResults (Just rocks) results = do
+      let batch = map resultToOp results
+      Rocks.write rocks def batch
+      return ()
+    resultToOp pd@ParsedDocument {..} =
+      Rocks.Put (hash origText) (Store.encode pd)
+    hash t =
+      S.fromString
+        (show
+           (Crypto.hash (S.toStrictByteString t) :: Crypto.Digest Crypto.SHA256))
+
+-- | Datatype holding original text and a parsed 'Document'
+data ParsedDocument = ParsedDocument
+  { origText :: Text
+  , doc :: Document
+  } deriving (Show, Eq, Generic)
+
+instance Store.Store ParsedDocument
+
+-- | Simple function to extract success results and print out errors
+extractSuccessDocs :: [(Text, Either String Document)] -> IO [ParsedDocument]
+extractSuccessDocs = fmap catMaybes . mapM f
+  where
+    f (_t, Left err) =
+      Prelude.putStrLn ("Error parsing CoreNLP result: " ++ err) >>
+      return Nothing
+    f (t, Right r') = return (Just (ParsedDocument t r'))
 
 headlines :: Text
 headlines =
