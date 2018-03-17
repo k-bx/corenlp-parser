@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d120674507d335fe088bc801332f54263e2fc5d1b244963f3bf34e32a80f9bb4
+-- hash: 7699c25a0577745e5220ed0ac5ea560a54920b40bfed99cdf121fbdbf346ed47
 
 name:           corenlp-parser
 version:        0.3.0.0
@@ -27,6 +27,7 @@ library
   ghc-options: -Wall
   build-depends:
       aeson
+    , async
     , base >=4.7 && <5
     , cryptonite
     , data-default

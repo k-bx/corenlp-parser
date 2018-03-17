@@ -29,6 +29,8 @@ module NLP.CoreNLP
   ) where
 
 import Control.Applicative
+import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Exception.Safe
 import Control.Monad (forM, when)
 import qualified Crypto.Hash as Crypto
@@ -287,10 +289,18 @@ data LaunchOptions = LaunchOptions
   { cacheDb :: Maybe FilePath -- ^ Optional path to a RocksDB file which will be used as a cache
   , memSizeMb :: Int -- ^ The "-Xmx" Java parameter
   , chunkSize :: Int -- ^ Number of elements by which to split the input. Good for caching upon a failure
+  , numWorkers :: Int -- ^ Number of CoreNLP workers to launch in parallel
   } deriving (Show, Eq)
 
 instance Default LaunchOptions where
-  def = LaunchOptions Nothing 8096 1000
+  def = LaunchOptions Nothing 8096 1000 2
+
+-- | Got this from https:\/\/stackoverflow.com\/questions\/29155068\/running-parallel-url-downloads-with-a-worker-pool-in-haskell
+traverseThrottled :: Traversable t => Int -> (a -> IO b) -> t a -> IO (t b)
+traverseThrottled concLevel action taskContainer = do
+  sem <- newQSem concLevel
+  let throttledAction = bracket_ (waitQSem sem) (signalQSem sem) . action
+  runConcurrently (traverse (Concurrently . throttledAction) taskContainer)
 
 -- | Launch CoreNLP with your inputs. This function will put every piece of 'Text' in a separate file, launch CoreNLP subprocess, and parse the results
 launchCoreNLP ::
@@ -320,7 +330,10 @@ launchCoreNLP fp' LaunchOptions {..} texts' = do
         "Got documents out of cache: " ++ show (Prelude.length cachedDocs)
       res <-
         Prelude.concat <$>
-        mapM (goByChunk mcacheDb fp) (chunksOf chunkSize texts)
+        traverseThrottled
+          numWorkers
+          (goByChunk mcacheDb fp)
+          (chunksOf chunkSize texts)
       return res
     goByChunk mcacheDb fp texts = do
       if Prelude.length texts <= 0
