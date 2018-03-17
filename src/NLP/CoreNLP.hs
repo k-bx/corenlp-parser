@@ -336,7 +336,7 @@ launchCoreNLP fp' LaunchOptions {..} texts' = do
               numWorkers
               (goByChunk tempDir mcacheDb fp)
               (zip ([1..]::[Integer]) (chunksOf chunkSize texts))
-          return res
+          return (cachedDocs ++ res)
     goByChunk tempDir mcacheDb fp (chunkId, texts) = do
       Prelude.putStrLn "> goByChunk started"
       if Prelude.length texts <= 0
