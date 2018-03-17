@@ -140,7 +140,7 @@ data PennPOS
   | WRB -- ^ Wh-adverb
   | LRB -- ^ "-LRB-"? No idea what's this
   | RRB -- ^ "-RRB-"? No idea what's this
-  | PosPunctuation Text -- ^ anyOf ".:,''$#$,", sometimes few together
+  | PosPunctuation -- ^ anyOf ".:,''$#$,", sometimes few together
   deriving (Show, Eq, Generic)
 
 instance Store.Store PennPOS
@@ -152,13 +152,13 @@ instance FromJSON PennPOS where
   parseJSON (J.String "-RRB-") = pure RRB
   parseJSON x = J.genericParseJSON jsonOpts x <|> parsePunctuation x
     where
-      parsePunctuation (J.String y) = pure (PosPunctuation y)
+      parsePunctuation (J.String _) = pure PosPunctuation
       parsePunctuation _ = fail "Expecting POS to be a String"
 
 instance ToJSON PennPOS where
   toJSON WPDollar = J.String "WP$"
   toJSON PRPDollar = J.String "PRP$"
-  toJSON (PosPunctuation t) = J.String t
+  toJSON PosPunctuation = J.String "."
   toJSON LRB = J.String "-LRB-"
   toJSON RRB = J.String "-RRB-"
   toJSON x = J.genericToJSON jsonOpts x
@@ -335,7 +335,7 @@ launchCoreNLP fp' LaunchOptions {..} texts' = do
             traverseThrottled
               numWorkers
               (goByChunk tempDir mcacheDb fp)
-              (zip ([1..]::[Integer]) (chunksOf chunkSize texts))
+              (zip ([1 ..] :: [Integer]) (chunksOf chunkSize texts))
           return (cachedDocs ++ res)
     goByChunk tempDir mcacheDb fp (chunkId, texts) = do
       Prelude.putStrLn "> goByChunk started"
