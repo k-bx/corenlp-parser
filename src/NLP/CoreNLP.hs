@@ -336,6 +336,7 @@ launchCoreNLP fp' LaunchOptions {..} texts' = do
           (chunksOf chunkSize texts)
       return res
     goByChunk mcacheDb fp texts = do
+      Prelude.putStrLn "> goByChunk started"
       if Prelude.length texts <= 0
         then return []
         else withSystemTempDirectory "corenlp-parser" $ \tempDir ->
