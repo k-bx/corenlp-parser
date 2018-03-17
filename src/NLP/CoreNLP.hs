@@ -37,6 +37,7 @@ import Data.Aeson (FromJSON, ToJSON)
 import Data.Default
 import Data.Either
 import Data.HashMap.Strict (HashMap)
+import Data.List.Split (chunksOf)
 import Data.Maybe
 import Data.Semigroup
 import qualified Data.Store as Store
@@ -284,10 +285,12 @@ parseJsonDoc = J.eitherDecode . S.fromText
 -- | Additional options
 data LaunchOptions = LaunchOptions
   { cacheDb :: Maybe FilePath -- ^ Optional path to a RocksDB file which will be used as a cache
+  , memSizeMb :: Int -- ^ The "-Xmx" Java parameter
+  , chunkSize :: Int -- ^ Number of elements by which to split the input. Good for caching upon a failure
   } deriving (Show, Eq)
 
 instance Default LaunchOptions where
-  def = LaunchOptions Nothing
+  def = LaunchOptions Nothing 8096 1000
 
 -- | Launch CoreNLP with your inputs. This function will put every piece of 'Text' in a separate file, launch CoreNLP subprocess, and parse the results
 launchCoreNLP ::
@@ -310,43 +313,53 @@ launchCoreNLP fp' LaunchOptions {..} texts' = do
       if t !! (Prelude.length t - 1) == '/'
         then t
         else t <> "/"
+    go :: Maybe Rocks.DB -> FilePath -> [Text] -> IO [ParsedDocument]
     go mcacheDb fp texts'' = do
       (cachedDocs, texts) <- getCachedDocs mcacheDb texts''
       Prelude.putStrLn $
         "Got documents out of cache: " ++ show (Prelude.length cachedDocs)
-      if (Prelude.length texts <= 0)
-        then return cachedDocs
-        else do
-          withSystemTempDirectory "corenlp-parser" $ \tempDir -> do
-            withCurrentDirectory tempDir $ do
-              Prelude.putStrLn $ "Temp dir used is is: " <> tempDir
-              tmpFileNames <-
-                forM (zip [1 ..] texts) $ \(i :: Integer, txt) -> do
-                  let fname = ("text-" ++ show i ++ ".txt")
-                  T.writeFile (tempDir ++ "/" ++ fname) txt
-                  return fname
-              withSystemTempFile "filelist.txt" $ \filelistTxt hfilelistTxt -> do
-                Prelude.putStrLn $ "Filelist.txt: " ++ show filelistTxt
-                let filesList =
-                      T.unlines
-                        (map (\x -> S.toText (tempDir <> "/" <> x)) tmpFileNames)
-                T.hPutStrLn hfilelistTxt (T.strip filesList)
-                hFlush hfilelistTxt
-                let cmd =
-                      "java --add-modules java.se.ee -cp \"" ++
-                      fp ++
-                      "*\" -Xmx4g edu.stanford.nlp.pipeline.StanfordCoreNLP -annotators tokenize,ssplit,pos,lemma,ner,parse,dcoref -outputFormat json -filelist " <>
-                      filelistTxt
-                Prelude.putStrLn $ "Running a command: " ++ cmd
-                let spec = shell cmd
-                (_, _, _, processHandle) <- createProcess spec
-                code <- waitForProcess processHandle
-                when (code /= ExitSuccess) (error (show code))
-                let tmpFileNamesJson = map (<> ".json") tmpFileNames
-                results <- forM tmpFileNamesJson $ \fname -> T.readFile fname
-                rv <- extractSuccessDocs (zip texts (map parseJsonDoc results))
-                cacheResults mcacheDb rv
-                return (cachedDocs ++ rv)
+      res <-
+        Prelude.concat <$>
+        mapM (goByChunk mcacheDb fp) (chunksOf chunkSize texts)
+      return res
+    goByChunk mcacheDb fp texts = do
+      if Prelude.length texts <= 0
+        then return []
+        else withSystemTempDirectory "corenlp-parser" $ \tempDir ->
+               withCurrentDirectory tempDir $ do
+                 Prelude.putStrLn $ "Temp dir used is: " <> tempDir
+                 tmpFileNames <-
+                   forM (zip [1 ..] texts) $ \(i :: Integer, txt) -> do
+                     let fname = "text-" ++ show i ++ ".txt"
+                     T.writeFile (tempDir ++ "/" ++ fname) txt
+                     return fname
+                 withSystemTempFile "filelist.txt" $ \filelistTxt hfilelistTxt -> do
+                   Prelude.putStrLn $ "Filelist.txt: " ++ show filelistTxt
+                   let filesList =
+                         T.unlines
+                           (map
+                              (\x -> S.toText (tempDir <> "/" <> x))
+                              tmpFileNames)
+                   T.hPutStrLn hfilelistTxt (T.strip filesList)
+                   hFlush hfilelistTxt
+                   let cmd =
+                         "java --add-modules java.se.ee -cp \"" ++
+                         fp ++
+                         "*\" -Xmx" ++
+                         show memSizeMb ++
+                         " edu.stanford.nlp.pipeline.StanfordCoreNLP -annotators tokenize,ssplit,pos,lemma,ner,parse,dcoref -outputFormat json -filelist " <>
+                         filelistTxt
+                   Prelude.putStrLn $ "Running a command: " ++ cmd
+                   let spec = shell cmd
+                   (_, _, _, processHandle) <- createProcess spec
+                   code <- waitForProcess processHandle
+                   when (code /= ExitSuccess) (error (show code))
+                   let tmpFileNamesJson = map (<> ".json") tmpFileNames
+                   results <- forM tmpFileNamesJson $ \fname -> T.readFile fname
+                   rv <-
+                     extractSuccessDocs (zip texts (map parseJsonDoc results))
+                   cacheResults mcacheDb rv
+                   return rv
     getCachedDocs :: Maybe Rocks.DB -> [Text] -> IO ([ParsedDocument], [Text])
     getCachedDocs Nothing texts = return ([], texts)
     getCachedDocs (Just rocks) texts = do

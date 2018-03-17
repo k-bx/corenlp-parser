@@ -21,6 +21,7 @@ dependencies:
   - raw-strings-qq
   - rocksdb-haskell
   - safe-exceptions
+  - split
   - string-class
   - store
   - temporary

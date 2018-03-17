@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 951be5b6ce053014c505b53854ecea04601503a1e77d11bef3189384163fb53f
+-- hash: d120674507d335fe088bc801332f54263e2fc5d1b244963f3bf34e32a80f9bb4
 
 name:           corenlp-parser
 version:        0.3.0.0
@@ -35,6 +35,7 @@ library
     , raw-strings-qq
     , rocksdb-haskell
     , safe-exceptions
+    , split
     , store
     , string-class
     , temporary
