@@ -335,9 +335,9 @@ launchCoreNLP fp' LaunchOptions {..} texts' = do
             traverseThrottled
               numWorkers
               (goByChunk tempDir mcacheDb fp)
-              (chunksOf chunkSize texts)
+              (zip ([1..]::[Integer]) (chunksOf chunkSize texts))
           return res
-    goByChunk tempDir mcacheDb fp texts = do
+    goByChunk tempDir mcacheDb fp (chunkId, texts) = do
       Prelude.putStrLn "> goByChunk started"
       if Prelude.length texts <= 0
         then return []
@@ -345,7 +345,7 @@ launchCoreNLP fp' LaunchOptions {..} texts' = do
           Prelude.putStrLn $ "Temp dir used is: " <> tempDir
           tmpFileNames <-
             forM (zip [1 ..] texts) $ \(i :: Integer, txt) -> do
-              let fname = "text-" ++ show i ++ ".txt"
+              let fname = "text-" ++ show chunkId ++ "-" ++ show i ++ ".txt"
               T.writeFile (tempDir ++ "/" ++ fname) txt
               return fname
           withSystemTempFile "filelist.txt" $ \filelistTxt hfilelistTxt -> do
