@@ -347,7 +347,7 @@ launchCoreNLP fp' LaunchOptions {..} texts' = do
                          fp ++
                          "*\" -Xmx" ++
                          show memSizeMb ++
-                         " edu.stanford.nlp.pipeline.StanfordCoreNLP -annotators tokenize,ssplit,pos,lemma,ner,parse,dcoref -outputFormat json -filelist " <>
+                         "m edu.stanford.nlp.pipeline.StanfordCoreNLP -annotators tokenize,ssplit,pos,lemma,ner,parse,dcoref -outputFormat json -filelist " <>
                          filelistTxt
                    Prelude.putStrLn $ "Running a command: " ++ cmd
                    let spec = shell cmd
