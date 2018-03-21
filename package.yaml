@@ -1,5 +1,5 @@
 name:                corenlp-parser
-version:             0.3.0.0
+version:             0.3.0.1
 synopsis:            Launches CoreNLP and parses the JSON output
 description:         Launches CoreNLP and parses the JSON output
 homepage:            https://github.com/k-bx/corenlp-parser#readme
@@ -10,6 +10,7 @@ copyright:           All Rights Reserved
 category:            Natural Language Processing
 extra-source-files:
 - README.md
+extra-libraries: rocksdb
 
 dependencies:
   - aeson

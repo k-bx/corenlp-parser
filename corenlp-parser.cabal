@@ -2,10 +2,10 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 7699c25a0577745e5220ed0ac5ea560a54920b40bfed99cdf121fbdbf346ed47
+-- hash: f543ec5c7d7cc3d366a63cb8df782d521cd7dc1a76f423f3fbb4aa43a2b84153
 
 name:           corenlp-parser
-version:        0.3.0.0
+version:        0.3.0.1
 synopsis:       Launches CoreNLP and parses the JSON output
 description:    Launches CoreNLP and parses the JSON output
 category:       Natural Language Processing
@@ -25,6 +25,8 @@ library
   hs-source-dirs:
       src
   ghc-options: -Wall
+  extra-libraries:
+      rocksdb
   build-depends:
       aeson
     , async
