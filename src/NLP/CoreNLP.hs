@@ -208,7 +208,7 @@ data Token = Token
   , characterOffsetEnd :: Int
   , pos :: PennPOS
   , ner :: NamedEntity
-  , speaker :: Text
+  , speaker :: Maybe Text
   , before :: Text
   , after :: Text
   } deriving (Show, Eq, Generic)
@@ -302,7 +302,9 @@ traverseThrottled concLevel action taskContainer = do
   let throttledAction = bracket_ (waitQSem sem) (signalQSem sem) . action
   runConcurrently (traverse (Concurrently . throttledAction) taskContainer)
 
--- | Launch CoreNLP with your inputs. This function will put every piece of 'Text' in a separate file, launch CoreNLP subprocess, and parse the results
+-- | Launch CoreNLP with your inputs. This function will put every
+-- piece of 'Text' in a separate file, launch CoreNLP subprocess, and
+-- parse the results
 launchCoreNLP ::
      FilePath -- ^ Path to the directory where you extracted the CoreNLP project
   -> LaunchOptions
